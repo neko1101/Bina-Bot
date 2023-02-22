@@ -4,8 +4,6 @@ services:
   app:
     image: node:18
     working_dir: /app
-    ports:
-      - "3000:3000"
     volumes:
       - .:/app
     command: npm start
