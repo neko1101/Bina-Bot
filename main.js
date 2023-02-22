@@ -59,7 +59,7 @@ bot.command("pg_gold_24k", (ctx) => {
     get_pg_price().then(res => {
         console.log(res)
         ctx.reply(`
-        \nFetch time: ${moment().tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD HH:mm:ss')} \n- Public Gold - \nPG buy/g: ${res}
+        \n- Public Gold - \nPG buy/g: ${res}
         `, {
             reply_to_message_id: ctx.message.message_id,
             parse_mode: 'HTML'
