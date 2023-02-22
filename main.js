@@ -1,11 +1,17 @@
-const { Telegraf } = require('telegraf');
-const axios = require('axios');
-const cheerio = require('cheerio');
-const schedule = require("node-schedule");
+import { Telegraf } from 'telegraf'
+import axios from 'axios'
+import * as cheerio from 'cheerio'
+import * as schedule from 'node-schedule'
+import * as moment from 'moment-timezone'
+import * as dotenv from 'dotenv'
+import { ChatGPTAPI } from 'chatgpt'
+dotenv.config()
+
 let job
-let getDataJob
+const chatGptApi = new ChatGPTAPI({ apiKey: process.env.OPENAI_API_KEY })
 
 const bot = new Telegraf(process.env.BOT_KEY);
+
 bot.start((ctx) => {
     console.table(ctx)
     console.log(ctx.message)
@@ -37,11 +43,11 @@ bot.command("stop", (ctx) => {
     }
 })
 
-bot.command("gold_24k", (ctx) => {
-    getPrice().then(res => {
-        console.log(res)
+bot.command("bnm_gold_24k", (ctx) => {
+    getBnmPrice().then(res => {
+        // console.log(res)
         ctx.reply(`
-        \nEffective Date: ${res.effective_date} \nLast updated: ${res.last_updated} \n\n- Forex - \nBNM buy/g: RM ${res.bnm_buy_g} \nBNM sell/g: RM ${res.bnm_sell_g} \n\n- Retail - \nPG buy/g: RM ${~~res.pg_buy_g} \nPG sell/g: RM ${~~res.pg_sell_g}
+        \nEffective Date: ${res.effective_date} \nLast updated: ${res.last_updated} \n\n- Forex - \nBNM buy/g: RM ${res.bnm_buy_g} \nBNM sell/g: RM ${res.bnm_sell_g}
         `, {
             reply_to_message_id: ctx.message.message_id,
             parse_mode: 'HTML'
@@ -49,20 +55,29 @@ bot.command("gold_24k", (ctx) => {
     })
 })
 
-// sample metion
-bot.command("maki", (ctx) => {
-    ctx.reply("Bugima lu @pakiula")
+bot.command("pg_gold_24k", (ctx) => {
+    get_pg_price().then(res => {
+        console.log(res)
+        ctx.reply(`
+        \nFetch time: ${moment().tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD HH:mm:ss')} \n- Public Gold - \nPG buy/g: ${res}
+        `, {
+            reply_to_message_id: ctx.message.message_id,
+            parse_mode: 'HTML'
+        })
+    })
 })
 
-function getPrice() {
+bot.command("ping", (ctx) => {
+    ctx.reply("Pong!")
+})
+
+function getBnmPrice() {
     const one_oz = 28.35;
     const config = {
         headers:{
           Accept: 'application/vnd.BNM.API.v1+json'
         }
     };
-
-    let data
     return axios.get('https://api.bnm.gov.my/public/kijang-emas', config)
     .then(res => {
         const bnm_buy_oz = res.data.data.one_oz.buying
@@ -71,16 +86,16 @@ function getPrice() {
         const last_updated = res.data.meta.last_updated
         const bnm_buy_g = (bnm_buy_oz/one_oz).toFixed(2)
         const bnm_sell_g = (bnm_sell_oz/one_oz).toFixed(2)
-        const pg_buy_g = (+bnm_buy_g  - (+bnm_buy_g)/100*11).toFixed(2)
-        const pg_sell_g = (+bnm_sell_g  - (+bnm_sell_g)/100*7).toFixed(2)
+        // const pg_buy_g = (+bnm_buy_g  - (+bnm_buy_g)/100*11).toFixed(2)
+        // const pg_sell_g = (+bnm_sell_g  - (+bnm_sell_g)/100*7).toFixed(2)
 
         const gold_data_24k = {
             effective_date,
             last_updated,
             bnm_buy_g,
             bnm_sell_g,
-            pg_buy_g,
-            pg_sell_g
+            // pg_buy_g,
+            // pg_sell_g
         }
         return gold_data_24k
     })
@@ -90,19 +105,35 @@ function getPrice() {
 function get_pg_price() {
     // pg buy - 11%
     // pg sell - 7%
-    axios.get('https://publicgold.com.my/')
+    return axios.get('https://publicgold.com.my/')
     .then((response) => {
         const html = response.data
         const $ = cheerio.load(html)
-        
+        let price
         $('td:contains(= 1.0000 gram)', html).each(function() {
             const text = $(this).text()
             if(text.length > 0){
-                console.log(text.trim())
+                price = text.trim()
             }
         })
+        return price
     }).catch((err) => console.log(err))
 }
+
+
+async function sendChatGptMessage({ message }) {
+    return await chatGptApi.sendMessage(message) 
+}
+
+bot.command("chatgpt", (ctx) => {
+    const message = ctx.update.message.text.replace("/chatgpt ", "")
+    sendChatGptMessage({ message }).then((res) => {
+        ctx.reply(res.text, {
+            reply_to_message_id: ctx.message.message_id,
+            parse_mode: 'HTML'
+        })
+    })
+})
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
